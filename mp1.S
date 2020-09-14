@@ -6,6 +6,7 @@
 	
 
 	mp1_list_head: .long 0
+	mp1_previous: .long 0x0
     # Constants for accessing the fields of a struct missile, 
     # struct missile is defined in rtc.h and mp1.h
 
@@ -185,6 +186,9 @@ movl mp1_missile_list, %ebx #Grab the head of the list
 cmpl $0, %ebx #See if its empty
 je tasklet_end #If there are no missiles, end
 
+movl %ebx, mp1_previous #Use EDX for holding previous
+
+
 through_list:
 cmpl  $0, EXPLODED(%ebx) #See if it has exploded
 jg decrease_exploded
@@ -214,15 +218,9 @@ addl %ecx, %eax
 #space
 movl $SPACE, %ecx
 
-pushl %eax
-pushl %ecx
-pushl %edx
 
 call mp1_poke
 
-popl %edx
-popl %ecx
-popl %eax
 
 
 #update positions
@@ -256,21 +254,14 @@ jg char_c
 #In the case we have hit the dest, we get explode
 
 
-pushl %eax
-pushl %ecx
-pushl %edx
 
-push $EXPLOSION #Push the @ character on the stack to grab later
+pushl $EXPLOSION #Push the @ character on the stack to grab later
 pushl %ebx
 
 call missile_explode
 
 popl %edx
-popl %edx
 
-popl %edx
-popl %ecx
-popl %eax
 
 cmpl $0, %eax
 je draw_missile
@@ -340,19 +331,35 @@ je free_missile
 jmp next_missile
 free_missile:
 
-pushl %eax
-pushl %ecx
-pushl %edx
 
 pushl %ebx
 call mp1_free
 popl %ebx
 
-popl %edx
-popl %ecx
-popl %eax
+movl mp1_previous, %edx
+movl mp1_missile_list, %ecx
+cmpl %ecx, %edx
+je still_at_start
+movl NEXT(%ebx), %ecx
+movl %ecx, NEXT(%edx)
+movl  NEXT(%ebx), %ebx
+cmpl $0, %ebx
+jne  through_list #If it's not 0, we still go through
+jmp tasklet_end
+
+still_at_start:
+movl NEXT(%ebx), %edx
+movl %edx, mp1_previous
+movl NEXT(%ebx), %edx
+movl %edx, mp1_missile_list
+movl  NEXT(%ebx), %ebx
+cmpl $0, %ebx
+jne  through_list #If it's not 0, we still go through
+jmp tasklet_end
+
 
 next_missile: #Get the next missile
+movl %ebx, mp1_previous
 movl  NEXT(%ebx), %ebx
 cmpl $0, %ebx
 jne  through_list #If it's not 0, we still go through
