@@ -779,8 +779,6 @@ leave
 		ret
 
 mp1_ioctl_addmissile:
-
-
 pushl %ebp
 movl %esp, %ebp
 pushl %ebx
@@ -969,7 +967,6 @@ leave
 		ret
 
 mp1_ioctl_getstatus:
-
 pushl %ebp
 movl %esp, %ebp
 pushl %ebx
@@ -1038,10 +1035,10 @@ popl %edi
 popl %ebx
 leave
 
+
 		ret
 
 mp1_ioctl_endgame:
-pushl %ebp
 movl %esp, %ebp
 pushl %ebx
 pushl %edi
