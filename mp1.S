@@ -192,7 +192,9 @@ jg decrease_exploded
 
 #remove current missile spot
 movl $0, %eax #clear eax
-movl Y(%ebx), %ecx #get value of y as row counter
+movl $0, %ecx
+movl Y(%ebx), %ecx #get value of yz as row counter
+shr $SHIFT, %ecx
 re_mis_mul: #remove missile multiply operation
 cmpl $0, %ecx #If y=0, no more multiplication
 je re_mis_mul_done #remove missile multiply done
@@ -204,8 +206,10 @@ addl %eax, %eax #Now multiply the value by 2 for the row value
 
 #Now work on adding column value
 #It's adding the column value twice
-addl X(%ebx), %eax 
-addl X(%ebx), %eax 
+movl X(%ebx), %ecx
+shr $SHIFT, %ecx
+addl %ecx, %eax 
+addl %ecx, %eax 
 
 #space
 movl $SPACE, %ecx
@@ -250,20 +254,24 @@ addl %ecx, %edx #Put the difference between y and dest_y in edx
 cmpl $0, %edx #If it's not zero, we have not hit the dest, and we keep the character c
 jg char_c
 #In the case we have hit the dest, we get explode
-push $EXPLOSION #Push the @ character on the stack to grab later
-pushl %ebx
+
 
 pushl %eax
 pushl %ecx
 pushl %edx
 
+push $EXPLOSION #Push the @ character on the stack to grab later
+pushl %ebx
+
 call missile_explode
+
+popl %edx
+popl %edx
 
 popl %edx
 popl %ecx
 popl %eax
 
-popl %ebx
 cmpl $0, %eax
 je draw_missile
 
@@ -772,104 +780,6 @@ leave
 
 mp1_ioctl_addmissile:
 
-pushl %ebp
-movl %esp, %ebp
-pushl %ebx
-pushl %edi
-pushl %esi
-
-
-movl 8(%ebp), %ecx #pointer to the missile
-
-
-#Allocate space
-
-#Put Caller saves here
-
-pushl %eax
-pushl %ecx
-pushl %edx
-push $MISSILE_SIZE #Get the missile pointer for the function
-call mp1_malloc
-movl %eax, %ebx #Move the result into ebx for safety
-addl $4, %esp #Get rid of 36
-#Pop caller saves here
-popl %edx
-popl %ecx
-popl %eax
-
-#Return address in ebx
-#If ebx is 0, just skip to return -1
-cmpl $0, %ebx
-je addmissile_minus1
-
-
-#Call mp1_copy_from_user to put it in kernel
-
-#Put Caller saves here
-push %eax
-push %ecx
-push %edx
-
-push $MISSILE_SIZE #Push n
-push %ecx
-push %ebx
-call mp1_copy_from_user
-
-cmpl $0, %eax #Check if it returns 0. Pop Callers there
-#If eax is 0 here, use free with the spot for malloc, then -1
-jne addmissile_minus1m
-#Pop arguments/add esp (12)
-addl $12, %esp
-#Pop caller saves here
-pop %edx
-pop %ecx
-pop %eax
-
-
-
-#If eax is 0 here, use free with the spot for malloc, then -1
-
-#Put the missile in the list
-#ebx is new missile
-movl mp1_missile_list, %ecx
-movl %ecx, NEXT(%ebx)
-movl %ebx, mp1_missile_list
-
-#Return 0
-movl $0, %eax
-jmp addmissile_end
-
-#Return -1
-addmissile_minus1:
-movl $-1, %eax
-jmp addmissile_end
-
-#Return -1 after malloc
-addmissile_minus1m:
-push %eax
-push %ecx
-push %edx
-push %ebx #for undoing the malloc
-
-call mp1_free
-pop %edx
-pop %ecx
-pop %eax
-
-#Pop arguments/add esp (12)
-addl $12, %esp
-#Pop caller saves here
-pop %edx
-pop %ecx
-pop %eax
-movl $-1, %eax
-
-addmissile_end:
-popl %esi
-popl %edi
-popl %ebx
-leave
 		ret
 
 mp1_ioctl_movexhairs:
@@ -975,8 +885,111 @@ leave
 
 mp1_ioctl_getstatus:
 
+pushl %ebp
+movl %esp, %ebp
+pushl %ebx
+pushl %edi
+pushl %esi
+
+movl $0, %ecx #Clear ecx to hold stuff
+
+#Check First Base
+movl base_alive, %ebx #Get the base value
+andl $FIRST_BYTE, %ebx
+cmpl $0, %ebx
+je no_base1 #add value if it's not zero, skip if not
+addl $SIXTEEN, %ecx
+no_base1:
+
+#Check Second Base
+movl base_alive, %ebx #Get the base value
+andl $SECOND_BYTE, %ebx
+cmpl $0, %ebx
+je no_base2 #add value if it's not zero, skip if not
+addl $SEVENTEEN, %ecx
+no_base2:
+
+#Check THird Base
+movl base_alive, %ebx #Get the base value
+andl $THIRD_BYTE, %ebx
+cmpl $0, %ebx
+je no_base3 #add value if it's not zero, skip if not
+addl $EIGHTEEN, %ecx
+no_base3:
+
+addl $mp1_score, %ecx
+
+#Now call copy to function
+push %ecx
+movl %esp,  %eax #Get the address of the score as the from value
+movl 8(%ebp), %ebx #pointer to the to
+
+
+pushl $MISSILE_SIZE #Push n
+pushl %eax #*from value
+pushl %ebx #*to value
+call mp1_copy_to_user
+movl %eax, %ebx #Get returned value
+
+#Remove arguments and the score (4 of them, hence 16)
+popl %ecx
+popl %ecx
+popl %ecx
+#Then pop the caller registers
+popl %ecx
+
+
+cmpl $0, %ebx
+je status_ret0
+movl $-1, %eax
+jmp status_end
+status_ret0:
+movl $0, %eax
+
+status_end:
+
+popl %esi
+popl %edi
+popl %ebx
+leave
 
 		ret
 
 mp1_ioctl_endgame:
+pushl %ebp
+movl %esp, %ebp
+pushl %ebx
+pushl %edi
+pushl %esi
+
+movl mp1_missile_list, %ebx
+cmpl $0, %ebx
+je end_theendgame
+movl NEXT(%ebx), %ecx
+
+another_missile:
+
+pushl %eax
+pushl %ecx
+pushl %edx
+pushl %ebx
+call mp1_free
+add $4, %esp
+popl %edx
+popl %ecx
+popl %eax
+
+cmpl $0, %ecx
+je end_theendgame
+movl %ecx, %ebx
+movl NEXT(%ebx), %ecx
+jmp another_missile
+
+end_theendgame:
+
+popl %esi
+popl %edi
+popl %ebx
+leave
+
 		ret
