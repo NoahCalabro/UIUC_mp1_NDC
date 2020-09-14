@@ -780,6 +780,91 @@ leave
 
 mp1_ioctl_addmissile:
 
+
+pushl %ebp
+movl %esp, %ebp
+pushl %ebx
+pushl %edi
+pushl %esi
+
+
+movl 8(%ebp), %ecx #pointer to the missile
+
+
+#Allocate space
+
+#Put Caller saves here
+pushl %ecx
+
+pushl $MISSILE_SIZE #Get the missile pointer for the function
+call mp1_malloc
+popl %ecx #Get rid of 36
+
+#Pop caller saves here
+popl %ecx
+
+#Return address in eax
+#Also store it in ebx for safety
+movl %eax, %ebx
+#If eax is 0, just skip to return -1
+cmpl $0, %eax
+je addmissile_minus1
+
+
+#Call mp1_copy_from_user to put it in kernel
+
+#Put Caller saves here
+push %ecx
+
+push $MISSILE_SIZE #Push n
+push %ecx
+push %eax
+call mp1_copy_from_user
+
+#The TAs just shrugged at messing with esp, so I'm just popping 3 times
+pop %ecx
+pop %ecx
+pop %ecx
+
+pop %ecx#Pop caller saves here
+
+cmpl $0, %eax #Check if it returns 0. Pop Callers there
+#If eax is 0 here, use free with the spot for malloc, then -1
+jne addmissile_minus1m
+
+#If eax is 0 here, use free with the spot for malloc, then -1
+
+#Put the missile in the list
+#ebx is new missile
+movl mp1_missile_list, %ebx
+movl %ebx, NEXT(%ecx)
+movl %ecx, mp1_missile_list
+
+#Return 0
+movl $0, %eax
+jmp addmissile_end
+
+#Return -1
+addmissile_minus1:
+movl $-1, %eax
+jmp addmissile_end
+
+#Return -1 after malloc
+addmissile_minus1m:
+
+pushl %ebx #return register for undoing the malloc
+call mp1_free
+
+#Pop off the ebx (since messing with esp is bad)
+popl %eax
+movl $-1, %eax
+
+addmissile_end:
+popl %esi
+popl %edi
+popl %ebx
+leave
+
 		ret
 
 mp1_ioctl_movexhairs:
